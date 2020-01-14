@@ -111,7 +111,40 @@ trap_init(void)
 
 	void SYSCALL();
 	SETGATE(idt[48], 0, GD_KT, SYSCALL, 3);
-
+	
+	// IRQs for LAB 4
+	void IRQ0();
+	SETGATE(idt[IRQ_OFFSET + 0], 0, GD_KT, IRQ0, 0);
+	void IRQ1();
+	SETGATE(idt[IRQ_OFFSET + 1], 0, GD_KT, IRQ1, 0);
+	void IRQ2();
+	SETGATE(idt[IRQ_OFFSET + 2], 0, GD_KT, IRQ2, 0);
+	void IRQ3();
+	SETGATE(idt[IRQ_OFFSET + 3], 0, GD_KT, IRQ3, 0);
+	void IRQ4();
+	SETGATE(idt[IRQ_OFFSET + 4], 0, GD_KT, IRQ4, 0);
+	void IRQ5();
+	SETGATE(idt[IRQ_OFFSET + 5], 0, GD_KT, IRQ5, 0);
+	void IRQ6();
+	SETGATE(idt[IRQ_OFFSET + 6], 0, GD_KT, IRQ6, 0);
+	void IRQ7();
+	SETGATE(idt[IRQ_OFFSET + 7], 0, GD_KT, IRQ7, 0);
+	void IRQ8();
+	SETGATE(idt[IRQ_OFFSET + 8], 0, GD_KT, IRQ8, 0);
+	void IRQ9();
+	SETGATE(idt[IRQ_OFFSET + 9], 0, GD_KT, IRQ9, 0);
+	void IRQ10();
+	SETGATE(idt[IRQ_OFFSET + 10], 0, GD_KT, IRQ10, 0);
+	void IRQ11();
+	SETGATE(idt[IRQ_OFFSET + 11], 0, GD_KT, IRQ11, 0);
+	void IRQ12();
+	SETGATE(idt[IRQ_OFFSET + 12], 0, GD_KT, IRQ12, 0);
+	void IRQ13();
+	SETGATE(idt[IRQ_OFFSET + 13], 0, GD_KT, IRQ13, 0);
+	void IRQ14();
+	SETGATE(idt[IRQ_OFFSET + 14], 0, GD_KT, IRQ14, 0);
+	void IRQ15();
+	SETGATE(idt[IRQ_OFFSET + 15], 0, GD_KT, IRQ15, 0);
 	
 	// Per-CPU setup 
 	trap_init_percpu();
@@ -228,6 +261,14 @@ print_regs(struct PushRegs *regs)
 static void
 trap_dispatch(struct Trapframe *tf)
 {
+	// Handle spurious interrupts
+	// The hardware sometimes raises these because of noise on the
+	// IRQ line or other reasons. We don't care.
+	if (tf->tf_trapno == IRQ_OFFSET + IRQ_SPURIOUS) {
+		cprintf("Spurious interrupt on irq 7\n");
+		print_trapframe(tf);
+		return;
+	}
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
 	switch(tf->tf_trapno) {
@@ -243,31 +284,26 @@ trap_dispatch(struct Trapframe *tf)
 				tf->tf_regs.reg_ecx, tf->tf_regs.reg_ebx, 
 				tf->tf_regs.reg_edi, tf->tf_regs.reg_esi);
 			return;
+		// Handle clock interrupts. Don't forget to acknowledge the
+		// interrupt using lapic_eoi() before calling the scheduler!
+		// LAB 4: Your code here.
+		case IRQ_OFFSET + IRQ_TIMER:
+			lapic_eoi();
+			sched_yield();
+			return;
 		default:
+			// Unexpected trap: The user process or the kernel has a bug.
+			print_trapframe(tf);
+			if (tf->tf_cs == GD_KT)
+				panic("unhandled trap in kernel");
+			else {
+				env_destroy(curenv);
+				return;
+			}
 			break;
 	}
 
-	// Handle spurious interrupts
-	// The hardware sometimes raises these because of noise on the
-	// IRQ line or other reasons. We don't care.
-	if (tf->tf_trapno == IRQ_OFFSET + IRQ_SPURIOUS) {
-		cprintf("Spurious interrupt on irq 7\n");
-		print_trapframe(tf);
-		return;
-	}
 
-	// Handle clock interrupts. Don't forget to acknowledge the
-	// interrupt using lapic_eoi() before calling the scheduler!
-	// LAB 4: Your code here.
-
-	// Unexpected trap: The user process or the kernel has a bug.
-	print_trapframe(tf);
-	if (tf->tf_cs == GD_KT)
-		panic("unhandled trap in kernel");
-	else {
-		env_destroy(curenv);
-		return;
-	}
 }
 
 void
@@ -296,6 +332,7 @@ trap(struct Trapframe *tf)
 		// Acquire the big kernel lock before doing any
 		// serious kernel work.
 		// LAB 4: Your code here.
+		lock_kernel();
 		assert(curenv);
 
 		// Garbage collect if current enviroment is a zombie
@@ -378,11 +415,36 @@ page_fault_handler(struct Trapframe *tf)
 	//   (the 'tf' variable points at 'curenv->env_tf').
 
 	// LAB 4: Your code here.
-
+	
+	struct UTrapframe *utf;
+	if(curenv->env_pgfault_upcall) {
+		// tf->tf_esp in [UXSTACKTOP - PGSIZE, UXSTACKTOP-1]
+		if(UXSTACKTOP - PGSIZE <= tf->tf_esp && tf->tf_esp <= UXSTACKTOP - 1)
+			utf = (struct UTrapframe *)(tf->tf_esp - sizeof(struct UTrapframe) - 4);
+		else
+			utf = (struct UTrapframe *)(UXSTACKTOP - sizeof(struct UTrapframe));
+		// mem_assert
+		user_mem_assert(curenv, (void *)utf, sizeof(struct UTrapframe), PTE_U | PTE_W);
+		// set utf
+		utf->utf_fault_va = fault_va;
+		utf->utf_err = tf->tf_trapno;
+		utf->utf_eip = tf->tf_eip;
+		utf->utf_eflags = tf->tf_eflags;
+		utf->utf_esp = tf->tf_esp;
+		utf->utf_regs = tf->tf_regs;
+		
+		// set tf
+		tf->tf_eip = (uint32_t)curenv->env_pgfault_upcall;
+		tf->tf_esp = (uint32_t)utf;
+		// run current env
+		env_run(curenv);
+	}else {
+	
 	// Destroy the environment that caused the fault.
 	cprintf("[%08x] user fault va %08x ip %08x\n",
 		curenv->env_id, fault_va, tf->tf_eip);
 	print_trapframe(tf);
 	env_destroy(curenv);
+	}
 }
 

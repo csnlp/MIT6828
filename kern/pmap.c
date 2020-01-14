@@ -284,7 +284,7 @@ mem_init_mp(void)
 				kstacktop_i - KSTKSIZE, 
 				ROUNDUP(KSTKSIZE, PGSIZE), 
 				PADDR(&percpu_kstacks[i]), 
-				PTE_W | PTE_P);
+				PTE_W);
 	}
 
 }
@@ -304,12 +304,6 @@ mem_init_mp(void)
 void
 page_init(void)
 {
-	// LAB 4:
-	// Change your code to mark the physical page at MPENTRY_PADDR
-	// as in use
-	int range_mpentry = PGNUM(MPENTRY_PADDR);
-	pages[range_mpentry+1].pp_link = pages[range_mpentry].pp_link;
-	pages[range_mpentry+1].pp_link = NULL;
 
 	// The example code here marks all physical pages as free.
 	// However this is not truly the case.  What memory is free?
@@ -332,10 +326,28 @@ page_init(void)
 
 	// (1). Mark physical page 0 as in use
 	pages[0].pp_ref = 1;
+
+	// LAB 4:
+	// Change your code to mark the physical page at MPENTRY_PADDR
+	// as in use
+	size_t i;
+	for(i=1; i < MPENTRY_PADDR/PGSIZE; i++) {
+		pages[i].pp_ref = 0;
+		pages[i].pp_link = page_free_list;
+		page_free_list = &pages[i];
+	}
+	//boot APs entry code
+	extern unsigned char mpentry_start[], mpentry_end[];
+	size_t size = mpentry_end - mpentry_start;
+	size = ROUNDUP(size, PGSIZE);
+	for(; i<(MPENTRY_PADDR+size)/PGSIZE; i++) {
+		pages[i].pp_ref = 1;
+	}
 	
 	// (2). The rest of base memory, i.e., the memory between [PGSIZE, npages_basemen*PGSIZE)
-	size_t i;
-	for(i = 1; i < npages_basemem; i++) {
+	//size_t i;
+	//for(i = 1; i < npages_basemem; i++) {
+	for(; i < npages_basemem; i++) {
 		pages[i].pp_ref = 0; 
 		pages[i].pp_link = page_free_list;
 		page_free_list = &pages[i];
@@ -674,7 +686,7 @@ mmio_map_region(physaddr_t pa, size_t size)
 	size = ROUNDUP(size, PGSIZE);
 	if(base + size > MMIOLIM || base + size < base)
 		panic("mmio_map_region fail: overflow");
-	boot_map_region(kern_pgdir, base, size, pa, PTE_P | PTE_PCD | PTE_PWT);
+	boot_map_region(kern_pgdir, base, size, pa, PTE_W | PTE_PCD | PTE_PWT);
 	base += size;
 	return ret;
 	//panic("mmio_map_region not implemented");
