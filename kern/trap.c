@@ -178,21 +178,23 @@ trap_init_percpu(void)
 	// user space on that CPU.
 	//
 	// LAB 4: Your code here:
-	thiscpu->cpu_ts.ts_esp0 = KSTACKTOP - cpunum() * (KSTKGAP + KSTKSIZE);
-	thiscpu->cpu_ts.ts_ss0 = GD_KD; 
-	
-	// Initialize the TSS slot of the gdt. 
-	gdt[(GD_TSS0 >> 3) + cpunum()] = SEG16(STS_T32A,
-					(uint32_t)(&thiscpu->cpu_ts), 						sizeof(struct Taskstate)-1, 
-					0);
-	gdt[(GD_TSS0 >> 3) + cpunum()].sd_s = 0;
-	// Load the TSS selector (like other segment selectors, the
-	// bottom three bits are special; we leave them 0)
-	ltr(GD_TSS0 + sizeof(struct Segdesc) * cpunum());
-
-	// Load the IDT
-	lidt(&idt_pd);
-
+//	int cid = thiscpu->cpu_id;
+//	thiscpu->cpu_ts.ts_esp0 = KSTACKTOP - cid * (KSTKGAP + KSTKSIZE);
+//	thiscpu->cpu_ts.ts_ss0 = GD_KD; 
+//	thiscpu->cpu_ts.ts_iomb = sizeof(struct Taskstate);
+//	
+//	// Initialize the TSS slot of the gdt. 
+//	gdt[(GD_TSS0 >> 3) + cid] = SEG16(STS_T32A,
+//					(uint32_t)(&thiscpu->cpu_ts), 						sizeof(struct Taskstate)-1, 
+//					0);
+//	gdt[(GD_TSS0 >> 3) + cid].sd_s = 0;
+//	// Load the TSS selector (like other segment selectors, the
+//	// bottom three bits are special; we leave them 0)
+//	ltr(GD_TSS0 + sizeof(struct Segdesc) * cid);
+//
+//	// Load the IDT
+//	lidt(&idt_pd);
+//
 	// Setup a TSS so that we get the right stack
 	// when we trap to the kernel.
 	//ts.ts_esp0 = KSTACKTOP;
@@ -210,6 +212,20 @@ trap_init_percpu(void)
 
 	//// Load the IDT
 	//lidt(&idt_pd);
+	thiscpu->cpu_ts.ts_esp0 = KSTACKTOP - cpunum() * (KSTKGAP + KSTKSIZE);
+	thiscpu->cpu_ts.ts_ss0 = GD_KD;
+
+	// Initialize the TSS slot of the gdt.
+	gdt[(GD_TSS0 >> 3) + cpunum()] = SEG16(STS_T32A, (uint32_t) (&thiscpu->cpu_ts),
+					sizeof(struct Taskstate) - 1, 0);
+	gdt[(GD_TSS0 >> 3) + cpunum()].sd_s = 0;
+
+	// Load the TSS selector (like other segment selectors, the
+	// bottom three bits are special; we leave them 0)
+	ltr(GD_TSS0 + sizeof(struct Segdesc) * cpunum());
+
+	// Load the IDT
+	lidt(&idt_pd);
 }
 
 void
@@ -291,6 +307,16 @@ trap_dispatch(struct Trapframe *tf)
 			lapic_eoi();
 			sched_yield();
 			return;
+		// Handle keyboard and serial interrupts.
+		// LAB 5: Your code here.
+		case (IRQ_OFFSET + IRQ_KBD):
+			lapic_eoi();
+			kbd_intr();
+			return;
+		case (IRQ_OFFSET + IRQ_SERIAL):
+			lapic_eoi();
+			serial_intr();
+			return;
 		default:
 			// Unexpected trap: The user process or the kernel has a bug.
 			print_trapframe(tf);
@@ -313,8 +339,6 @@ trap_dispatch(struct Trapframe *tf)
 		return;
 	}
 
-	// Handle keyboard and serial interrupts.
-	// LAB 5: Your code here.
 
 }
 

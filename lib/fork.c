@@ -71,26 +71,59 @@ duppage(envid_t envid, unsigned pn)
 	int r;
 
 	// LAB 4: Your code here.
+//
+//	void *addr;
+//	pte_t pte;
+//	int perm;
+//	
+//	addr = (void *)((uint32_t)pn * PGSIZE);
+//	pte = uvpt[pn];
+//	perm = PTE_P | PTE_U;
+//	if ((pte & PTE_W) || (pte & PTE_COW))
+//		perm |= PTE_COW;
+//	if ((r = sys_page_map(thisenv->env_id, addr, envid, addr, perm)) < 0) {
+//		panic("duppage failed: page remapping failed: %e", r);
+//		return r;
+//	}
+//	if (perm & PTE_COW) {
+//		if ((r = sys_page_map(thisenv->env_id, addr, thisenv->env_id, addr, perm)) < 0) {
+//			panic("duppage failed: page remapping failed: %e", r);
+//			return r;
+//		}
+//	}
+//	//panic("duppage not implemented");
+//	return 0;
+
+	// LAB 5: For exercise 8. 
 	void *addr;
 	pte_t pte;
 	int perm;
-	
+
 	addr = (void *)((uint32_t)pn * PGSIZE);
 	pte = uvpt[pn];
-	perm = PTE_P | PTE_U;
-	if ((pte & PTE_W) || (pte & PTE_COW))
-		perm |= PTE_COW;
-	if ((r = sys_page_map(thisenv->env_id, addr, envid, addr, perm)) < 0) {
-		panic("duppage failed: page remapping failed: %e", r);
-		return r;
-	}
-	if (perm & PTE_COW) {
-		if ((r = sys_page_map(thisenv->env_id, addr, thisenv->env_id, addr, perm)) < 0) {
-			panic("duppage failed: page remapping failed: %e", r);
+	// If the page table entry has the PTE_SHARE bit set, 
+	// just copy the mapping directly.  
+	if (pte & PTE_SHARE) {
+		if ((r = sys_page_map(sys_getenvid(), addr, envid, addr, pte & PTE_SYSCALL)) < 0) {
+			panic("duppage failed: sys_page_map failed: %e", r);
 			return r;
 		}
 	}
-	//panic("duppage not implemented");
+	else {
+		perm = PTE_P | PTE_U;
+        	if ((pte & PTE_W) || (pte & PTE_COW))
+        		perm |= PTE_COW;
+        	if ((r = sys_page_map(thisenv->env_id, addr, envid, addr, perm)) < 0) {
+        		panic("duppage failed: page remapping failed: %e", r);
+        		return r;
+        	}
+        	if (perm & PTE_COW) {
+        		if ((r = sys_page_map(thisenv->env_id, addr, thisenv->env_id, addr, perm)) < 0) {
+        			panic("duppage failed: page remapping failed: %e", r);
+        			return r;
+        		}
+        	}
+	}
 	return 0;
 }
 
