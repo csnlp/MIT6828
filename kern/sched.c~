@@ -12,19 +12,6 @@ void
 sched_yield(void)
 {
 	struct Env *idle;
-	
-	idle = curenv;
-	int start_envid = idle ? ENVX(idle->env_id) + 1 : 0;
-	for (int i = 0; i < NENV; i++) {
-		int j = (start_envid + i) % NENV;
-		if (envs[j].env_status == ENV_RUNNABLE) {
-			env_run(&envs[j]);
-		}
-	}
-	
-	if (idle && idle->env_status == ENV_RUNNING) {
-		env_run(idle);
-	}
 
 	// Implement simple round-robin scheduling.
 	//
@@ -34,8 +21,7 @@ sched_yield(void)
 	//
 	// If no envs are runnable, but the environment previously
 	// running on this CPU is still ENV_RUNNING, it's okay to
-	// choose that environment. Make sure curenv is not null before
-	// dereferencing it.
+	// choose that environment.
 	//
 	// Never choose an environment that's currently running on
 	// another CPU (env_status == ENV_RUNNING). If there are
@@ -43,30 +29,30 @@ sched_yield(void)
 	// below to halt the cpu.
 
 	// LAB 4: Your code here.
-	//uint32_t i, j, start;
-	//struct Env *foundenv;
-	//foundenv = NULL;
-	//// get the current env running on this CPU. 
-	//struct Env *cpu_curenv = thiscpu->cpu_env;
-	//start = (cpu_curenv != NULL) ? ENVX(cpu_curenv->env_id) : 0;
-	//// get the env with the least priority. 
-	//for(i=0; i < NENV; i++) {
-	//	j = (start + i) % NENV;
-	//		if (envs[j].env_status == ENV_RUNNABLE) {
-	//			if (foundenv == NULL)
-	//				foundenv = &envs[j];
-	//				break;
-	//		}
-	//}
-	//// check if the kernel has found available CPU if not use the curenv 
-	//if ((cpu_curenv && cpu_curenv->env_status == ENV_RUNNING) && (foundenv == NULL)) {
-	//	env_run(cpu_curenv);
-	//	return;
-	//}
-	//if(foundenv) {
-	//	env_run(foundenv);
-	//	return;
-	//}
+	uint32_t i, j, start;
+	struct Env *foundenv;
+	foundenv = NULL;
+	// get the current env running on this CPU. 
+	struct Env *cpu_curenv = thiscpu->cpu_env;
+	start = (cpu_curenv != NULL) ? ENVX(cpu_curenv->env_id) : 0;
+	// get the env with the least priority. 
+	for(i=0; i < NENV; i++) {
+		j = (start + i) % NENV;
+			if (envs[j].env_status == ENV_RUNNABLE) {
+				if (foundenv == NULL)
+					foundenv = &envs[j];
+					break;
+			}
+	}
+	// check if the kernel has found available CPU if not use the curenv 
+	if ((cpu_curenv && cpu_curenv->env_status == ENV_RUNNING) && (foundenv == NULL)) {
+		env_run(cpu_curenv);
+		return;
+	}
+	if(foundenv) {
+		env_run(foundenv);
+		return;
+	}
 	/*
 	uint32_t i, j, start;
 	struct Env *foundenv;
@@ -139,7 +125,7 @@ sched_halt(void)
 		"pushl $0\n"
 		"pushl $0\n"
 		// Uncomment the following line after completing exercise 13
-		"sti\n"
+		//"sti\n"
 		"1:\n"
 		"hlt\n"
 		"jmp 1b\n"

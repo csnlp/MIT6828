@@ -65,5 +65,6 @@ umain(int argc, char **argv)
 			continue;
 		}
 		wait(r);
+		cprintf("waiting r after error!!");
 	}
 }

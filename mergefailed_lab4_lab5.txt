@@ -1,0 +1,12 @@
+Auto-merging lib/printfmt.c
+Auto-merging kern/trap.c
+CONFLICT (content): Merge conflict in kern/trap.c
+Auto-merging kern/syscall.c
+Auto-merging kern/sched.c
+Auto-merging kern/pmap.c
+Auto-merging kern/init.c
+CONFLICT (content): Merge conflict in kern/init.c
+Auto-merging kern/env.c
+CONFLICT (content): Merge conflict in kern/env.c
+Automatic merge failed; fix conflicts and then commit the result.
+
